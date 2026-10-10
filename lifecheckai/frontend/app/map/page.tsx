@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -15,6 +15,9 @@ import { CrowdReportMarkers } from "@/components/realtime/CrowdReportMarkers";
 import { CrowdReportModal } from "@/components/realtime/CrowdReportModal";
 import { LiveActivityTicker } from "@/components/realtime/LiveActivityTicker";
 import { VoiceBriefingButton } from "@/components/voice/VoiceBriefingButton";
+import { GoogleMapCanvas } from "@/components/map/GoogleMapCanvas";
+import { CitySearchPanel } from "@/components/map/CitySearchPanel";
+import { CityDetailDrawer } from "@/components/map/CityDetailDrawer";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
 const MAP_MONITORED_CITIES_KEY = "lifecheck_map_monitored_cities";
@@ -682,14 +685,14 @@ export default function MapPage() {
                           <Wind className="text-accent-primary" size={16} />
                           <span className="caption-muted">AQI Score</span>
                       </div>
-                      <span className="text-2xl font-mono text-white mt-1">{selectedCity.aqi ?? "—"}</span>
+                      <span className="text-2xl font-mono text-white mt-1">{selectedCity.aqi ?? "â€”"}</span>
                    </Card>
                    <Card className="p-4 border-border-default flex flex-col gap-2">
                       <div className="flex items-center gap-2">
                           <Thermometer className="text-accent-violet" size={16} />
                           <span className="caption-muted">Temp</span>
                       </div>
-                      <span className="text-2xl font-mono text-white mt-1">{selectedCity.temp != null ? `${Math.round(selectedCity.temp)}°C` : "—"}</span>
+                      <span className="text-2xl font-mono text-white mt-1">{selectedCity.temp != null ? `${Math.round(selectedCity.temp)}Â°C` : "â€”"}</span>
                    </Card>
                 </div>
 
@@ -737,3 +740,4 @@ export default function MapPage() {
 
     </div>  );
 }
+

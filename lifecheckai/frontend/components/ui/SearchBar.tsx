@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { MapPin, Navigation, Search, Loader2, Clock3, Sparkles, X } from "lucide-react";
+import { trackTaskStart, trackTaskComplete } from "@/lib/telemetry";
 
 const RECENT_SEARCHES_KEY = "lifecheck_recent_searches";
 const MAX_RECENT = 6;
@@ -124,6 +125,9 @@ export function SearchBar({
       onSearch(trimmed);
       persistRecent(trimmed);
       setIsFocused(false);
+      // Telemetry: mark search submitted — dashboard will call trackTaskComplete
+      // when the safety verdict is rendered (via useSafetyData effect)
+      trackTaskComplete("find_safety", { method: "search_bar", city: trimmed });
     }
   }, [query, isLoading, onSearch, persistRecent]);
 
@@ -229,6 +233,8 @@ export function SearchBar({
           onFocus={() => {
             setIsFocused(true);
             requestRemoteSuggestions(query);
+            // Telemetry: user started looking for a city via standard search bar
+            trackTaskStart("find_safety");
           }}
           onBlur={() => setTimeout(() => setIsFocused(false), 120)}
           onKeyDown={handleKeyDown}

@@ -41,16 +41,21 @@ function LayoutShell({ children }: { children: ReactNode }) {
   );
 }
 
+import { QueryProvider } from "@/app/providers/QueryProvider";
+
 export function ClientLayout({ children }: { children: ReactNode }) {
   return (
-    <SpacetimeDBProvider>
-      <VoiceProvider>
-        <SafetyProvider>
-          <CommandPaletteProvider>
-            <LayoutShell>{children}</LayoutShell>
-          </CommandPaletteProvider>
-        </SafetyProvider>
-      </VoiceProvider>
-    </SpacetimeDBProvider>
+    <QueryProvider>
+      <SpacetimeDBProvider>
+        <VoiceProvider>
+          <SafetyProvider>
+            <CommandPaletteProvider>
+              <LayoutShell>{children}</LayoutShell>
+            </CommandPaletteProvider>
+          </SafetyProvider>
+        </VoiceProvider>
+      </SpacetimeDBProvider>
+    </QueryProvider>
   );
 }
+

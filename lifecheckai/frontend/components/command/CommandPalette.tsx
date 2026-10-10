@@ -18,6 +18,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
+import { trackTaskStart, trackTaskComplete, trackInteraction } from "@/lib/telemetry";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
 const RECENT_KEY = "lifecheck_recent_searches";
@@ -60,6 +61,10 @@ export function CommandPalette({
     if (!isOpen) {
       setQuery("");
       setSelectedIndex(0);
+    } else {
+      // Telemetry: opening the command palette starts the task (Version B path)
+      trackTaskStart("find_safety");
+      trackTaskStart("navigate_to_alerts");
     }
   }, [isOpen]);
 
@@ -193,7 +198,12 @@ export function CommandPalette({
     label: entry.value,
     subtitle: entry.subtitle || "Check safety",
     icon: <ArrowRight size={16} className="text-accent-primary" />,
-    run: () => onCitySelect(entry.value),
+    run: () => {
+      // Telemetry: city selected via command palette = Version B task complete
+      trackTaskComplete("find_safety", { method: "command_palette", city: entry.value });
+      trackInteraction("navigate_to_alerts");
+      onCitySelect(entry.value);
+    },
   }));
 
   const recentActions: PaletteAction[] = recent.map((cityName, index) => ({

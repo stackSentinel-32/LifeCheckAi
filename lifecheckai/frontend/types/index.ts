@@ -59,10 +59,12 @@ export interface SafetyData {
   air_quality: AirQuality;
   weather: Weather;
   pollen: Pollen;
-  source: "live" | "realtime_cache";
+  source: string;
   cache_hit: boolean;
   data_incomplete?: boolean;
   realtime_sync?: string;
+  composite_score?: number | null;
+  alerts?: AlertItem[];
 }
 
 export interface Message {
@@ -74,11 +76,14 @@ export interface Message {
 }
 
 export interface AlertItem {
-  id: string;
+  id?: string;
   city: string;
-  category: "air" | "weather" | "pollen" | "uv" | "water";
-  severity: "SAFE" | "CAUTION" | "UNSAFE";
-  title: string;
-  description: string;
-  timestamp: Date;
+  type?: string;
+  category?: "air" | "weather" | "pollen" | "uv" | "water";
+  severity?: "SAFE" | "CAUTION" | "UNSAFE" | "critical" | "high" | "info" | "warning";
+  level?: string;
+  title?: string;
+  message?: string;
+  description?: string;
+  timestamp?: Date | string;
 }

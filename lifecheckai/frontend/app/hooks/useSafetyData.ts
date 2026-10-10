@@ -1,178 +1,67 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSafety } from "@/app/context/SafetyContext";
+import { useSafetyCityQuery } from "@/hooks/queries/useSafetyQuery";
+import { getSafetyByCoordinates } from "@/lib/api/safety";
+import { safetyKeys } from "@/hooks/queries/queryKeys";
 import type { SafetyData } from "@/types";
 import { showToast } from "@/components/ui/Toast";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
-
-type RawSafetyPayload = Record<string, unknown> & {
-  air_quality?: Record<string, unknown>;
-  air?: Record<string, unknown>;
-  weather?: Record<string, unknown>;
-  pollen?: Record<string, unknown>;
-};
-
-function normalizeSafetyData(payload: RawSafetyPayload): SafetyData {
-  const airSource = payload?.air_quality ?? payload?.air ?? {};
-  const weatherSource = payload?.weather ?? {};
-  const pollenSource = payload?.pollen ?? {};
-
-  const weather = {
-    temp_celsius:
-      typeof weatherSource?.temp_celsius === "number"
-        ? weatherSource.temp_celsius
-        : typeof weatherSource?.temp === "number"
-          ? weatherSource.temp
-          : null,
-    feels_like:
-      typeof weatherSource?.feels_like === "number" ? weatherSource.feels_like : null,
-    humidity_percent:
-      typeof weatherSource?.humidity_percent === "number"
-        ? weatherSource.humidity_percent
-        : typeof weatherSource?.humidity === "number"
-          ? weatherSource.humidity
-          : null,
-    condition:
-      typeof weatherSource?.condition === "string" ? weatherSource.condition : "Unknown",
-    uv_index: typeof weatherSource?.uv_index === "number" ? weatherSource.uv_index : null,
-    wind_speed:
-      typeof weatherSource?.wind_speed === "number" ? weatherSource.wind_speed : null,
-    level:
-      typeof weatherSource?.level === "string"
-        ? weatherSource.level
-        : typeof weatherSource?.status === "string"
-          ? weatherSource.status
-          : "Unknown",
-    safe:
-      typeof weatherSource?.safe === "boolean"
-        ? weatherSource.safe
-        : String(weatherSource?.status || "").toUpperCase() === "SAFE",
-    advice:
-      typeof weatherSource?.advice === "string" ? weatherSource.advice : "",
-  };
-
-  const air_quality = {
-    aqi: typeof airSource?.aqi === "number" ? airSource.aqi : null,
-    category:
-      typeof airSource?.category === "string"
-        ? airSource.category
-        : typeof airSource?.status === "string"
-          ? airSource.status
-          : "Unknown",
-    dominant_pollutant:
-      typeof airSource?.dominant_pollutant === "string" ? airSource.dominant_pollutant : "",
-    pollutants:
-      airSource?.pollutants && typeof airSource.pollutants === "object"
-        ? airSource.pollutants
-        : {},
-    level:
-      typeof airSource?.level === "string"
-        ? airSource.level
-        : typeof airSource?.status === "string"
-          ? airSource.status
-          : "Unknown",
-    safe:
-      typeof airSource?.safe === "boolean"
-        ? airSource.safe
-        : String(airSource?.status || "").toUpperCase() === "SAFE",
-    advice: typeof airSource?.advice === "string" ? airSource.advice : "",
-  };
-
-  const pollen = {
-    types:
-      pollenSource?.types && typeof pollenSource.types === "object"
-        ? pollenSource.types
-        : typeof pollenSource === "object" && pollenSource !== null
-          ? pollenSource
-          : {},
-    level: typeof pollenSource?.level === "string" ? pollenSource.level : "Unknown",
-    advice: typeof pollenSource?.advice === "string" ? pollenSource.advice : "",
-  };
-
-  return {
-    ...payload,
-    air_quality,
-    weather,
-    pollen,
-  } as SafetyData;
-}
-
-function getCached(city: string): { data: SafetyData; timestamp: number } | null {
-  try {
-    const raw = localStorage.getItem(`lifecheck_${city.toLowerCase()}`);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function setCache(city: string, data: SafetyData) {
-  try {
-    localStorage.setItem(
-      `lifecheck_${city.toLowerCase()}`,
-      JSON.stringify({ data, timestamp: Date.now() })
-    );
-  } catch {
-    // localStorage full or unavailable
-  }
-}
-
 export function useSafetyData() {
   const { state, dispatch } = useSafety();
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const queryClient = useQueryClient();
+  const [isLocating, setIsLocating] = useState(false);
 
-  const fetchData = useCallback(
-    async (city: string) => {
-      if (!city.trim()) return;
+  // TanStack Query handles caching, deduplication, background refetching (every 60s), and stale time
+  const {
+    data: queryData,
+    isLoading: queryLoading,
+    isFetching,
+    error: queryError,
+    refetch,
+    dataUpdatedAt,
+  } = useSafetyCityQuery(state.city);
 
-      dispatch({ type: "SET_LOADING", payload: true });
-      dispatch({ type: "CLEAR_ERROR" });
+  // Synchronize TanStack Query server data into SafetyContext when fresh data arrives
+  useEffect(() => {
+    if (queryData) {
+      dispatch({ type: "SET_DATA", payload: queryData as unknown as SafetyData });
+    }
+  }, [queryData, dispatch]);
 
-      try {
-        const res = await fetch(`${API_BASE}/api/check-safety?city=${encodeURIComponent(city)}`);
-
-        if (!res.ok) {
-          throw new Error(res.status === 404 ? "City not found. Please check spelling." : `Server error (${res.status})`);
-        }
-
-        const raw = await res.json();
-        const data: SafetyData = normalizeSafetyData(raw);
-        dispatch({ type: "SET_DATA", payload: data });
-        setCache(city, data);
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Failed to fetch safety data";
-
-        // Try cached data
-        const cached = getCached(city);
-        if (cached && Date.now() - cached.timestamp < 5 * 60 * 1000) {
-          dispatch({ type: "SET_DATA", payload: cached.data });
-          showToast("warning", "Using cached data. Connection issue detected.");
-        } else {
-          dispatch({ type: "SET_ERROR", payload: message });
-          showToast("error", message);
-        }
-      }
-    },
-    [dispatch]
-  );
+  // Synchronize query errors into context and toast
+  useEffect(() => {
+    if (queryError) {
+      const message =
+        queryError instanceof Error
+          ? queryError.message
+          : "Failed to fetch safety data";
+      dispatch({ type: "SET_ERROR", payload: message });
+      showToast("error", message);
+    }
+  }, [queryError, dispatch]);
 
   const search = useCallback(
-    (city: string) => {
-      dispatch({ type: "SET_CITY", payload: city });
-      fetchData(city);
+    (cityName: string) => {
+      const trimmed = cityName.trim();
+      if (!trimmed) return;
+      dispatch({ type: "SET_CITY", payload: trimmed });
+      // Invalidate or trigger fetch for the searched city immediately
+      queryClient.prefetchQuery({
+        queryKey: safetyKeys.city(trimmed),
+        queryFn: () => queryClient.fetchQuery({ queryKey: safetyKeys.city(trimmed) }),
+      }).catch(() => {});
     },
-    [dispatch, fetchData]
+    [dispatch, queryClient]
   );
 
   const refresh = useCallback(() => {
     if (state.city) {
-      fetchData(state.city);
+      refetch();
     }
-  }, [state.city, fetchData]);
+  }, [state.city, refetch]);
 
   const locateMe = useCallback(async () => {
     if (!navigator.geolocation) {
@@ -180,6 +69,7 @@ export function useSafetyData() {
       return;
     }
 
+    setIsLocating(true);
     dispatch({ type: "SET_LOADING", payload: true });
     dispatch({ type: "CLEAR_ERROR" });
 
@@ -195,44 +85,41 @@ export function useSafetyData() {
       const lat = position.coords.latitude;
       const lon = position.coords.longitude;
 
-      const res = await fetch(
-        `${API_BASE}/api/check-safety-by-coordinates?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`,
-      );
+      // Execute typed and Zod-validated query
+      const validatedData = await queryClient.fetchQuery({
+        queryKey: safetyKeys.coordinates(lat, lon),
+        queryFn: () => getSafetyByCoordinates(lat, lon),
+        staleTime: 60 * 1000,
+      });
 
-      if (!res.ok) {
-        throw new Error(`Unable to resolve current location (${res.status})`);
-      }
+      dispatch({ type: "SET_CITY", payload: validatedData.city });
+      dispatch({ type: "SET_DATA", payload: validatedData as unknown as SafetyData });
 
-      const raw = await res.json();
-      const data: SafetyData = normalizeSafetyData(raw);
-      dispatch({ type: "SET_DATA", payload: data });
-      setCache(data.city || "current-location", data);
-      showToast("success", `Using your current location: ${data.city}`);
+      // Seed the city cache in TanStack Query so subsequent city lookups are immediate
+      queryClient.setQueryData(safetyKeys.city(validatedData.city), validatedData);
+
+      showToast("success", `Using your current location: ${validatedData.city}`);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Unable to use current location.";
+      const message =
+        err instanceof Error ? err.message : "Unable to use current location.";
       dispatch({ type: "SET_ERROR", payload: message });
       showToast("error", message);
+    } finally {
+      setIsLocating(false);
+      dispatch({ type: "SET_LOADING", payload: false });
     }
-  }, [dispatch]);
+  }, [dispatch, queryClient]);
 
-  // Auto-poll every 60s
-  useEffect(() => {
-    if (state.city) {
-      intervalRef.current = setInterval(() => {
-        fetchData(state.city);
-      }, 60000);
-    }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [state.city, fetchData]);
+  const activeData = (queryData as unknown as SafetyData) || state.safetyData;
+  const isLoading = isLocating || (queryLoading && !activeData);
 
   return {
-    data: state.safetyData,
-    loading: state.loading,
-    error: state.error,
+    data: activeData,
+    loading: isLoading,
+    isFetching,
+    error: state.error || (queryError ? queryError.message : null),
     city: state.city,
-    lastUpdated: state.lastUpdated,
+    lastUpdated: dataUpdatedAt ? new Date(dataUpdatedAt) : state.lastUpdated,
     search,
     refresh,
     locateMe,

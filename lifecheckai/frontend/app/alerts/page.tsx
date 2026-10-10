@@ -178,14 +178,14 @@ export default function AlertsPage() {
 
   const unreadAlerts = useMemo(
     () => {
-      const validIds = new Set(alerts.map((alert) => alert.id));
-      return alerts.filter((alert) => !readAlertIds.includes(alert.id) && validIds.has(alert.id));
+      const validIds = new Set(alerts.map((alert) => alert.id).filter(Boolean) as string[]);
+      return alerts.filter((alert) => alert.id && !readAlertIds.includes(alert.id) && validIds.has(alert.id));
     },
     [alerts, readAlertIds],
   );
 
   const topNotifications = useMemo(() => {
-    const severityWeight: Record<AlertItem["severity"], number> = {
+    const severityWeight: Record<string, number> = {
       UNSAFE: 3,
       CAUTION: 2,
       SAFE: 1,
@@ -193,9 +193,9 @@ export default function AlertsPage() {
 
     return [...alerts]
       .sort((a, b) => {
-        const severityDelta = severityWeight[b.severity] - severityWeight[a.severity];
+        const severityDelta = (severityWeight[b.severity || "SAFE"] || 0) - (severityWeight[a.severity || "SAFE"] || 0);
         if (severityDelta !== 0) return severityDelta;
-        return b.timestamp.getTime() - a.timestamp.getTime();
+        return new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime();
       })
       .slice(0, 4);
   }, [alerts]);
@@ -206,7 +206,7 @@ export default function AlertsPage() {
   );
 
   const markAllAsRead = useCallback(() => {
-    const ids = alerts.map((alert) => alert.id);
+    const ids = alerts.map((alert) => alert.id).filter(Boolean) as string[];
     setReadAlertIds(ids);
     localStorage.setItem(ALERTS_READ_KEY, JSON.stringify(ids));
   }, [alerts]);
@@ -324,14 +324,14 @@ export default function AlertsPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {topNotifications.map((item) => {
-                const unread = !readAlertIds.includes(item.id);
+              {topNotifications.map((item, i) => {
+                const unread = item.id ? !readAlertIds.includes(item.id) : false;
                 return (
                   <button
-                    key={`notification-${item.id}`}
+                    key={`notification-${item.id || i}`}
                     onClick={() => {
-                      setActiveFilter(item.category);
-                      markAsRead(item.id);
+                      if (item.category) setActiveFilter(item.category);
+                      if (item.id) markAsRead(item.id);
                       setSelectedAlert(item);
                     }}
                     className={`w-full text-left rounded-2xl glass p-4 transition-all hover:-translate-y-1 cursor-pointer ${
@@ -401,12 +401,12 @@ export default function AlertsPage() {
             <div className="absolute left-[39px] sm:left-[39px] top-6 bottom-0 w-[2px] bg-gradient-to-b from-white/20 via-white/5 to-transparent z-0" />
 
             <AnimatePresence>
-              {filteredAlerts.map((alert) => {
-                const style = severityStyles[alert.severity as keyof typeof severityStyles] || severityStyles.CAUTION;
-                const IconComp = categoryIcons[alert.category] || Wind;
+              {filteredAlerts.map((alert, i) => {
+                const style = severityStyles[(alert.severity || "CAUTION") as keyof typeof severityStyles] || severityStyles.CAUTION;
+                const IconComp = categoryIcons[alert.category || "air"] || Wind;
                 return (
                   <motion.div
-                    key={alert.id}
+                    key={alert.id || `alert-${i}`}
                     variants={itemVariants}
                     className="flex items-start gap-4 sm:gap-6 relative z-10 group"
                   >
@@ -422,7 +422,7 @@ export default function AlertsPage() {
                      <button
                         onClick={() => {
                           setSelectedAlert(alert);
-                          markAsRead(alert.id);
+                          if (alert.id) markAsRead(alert.id);
                         }}
                         className={`flex-1 text-left glass rounded-card p-5 border ${style.border} ${style.bg} ${style.glow} hover:bg-white/5 transition-all w-full cursor-pointer overflow-hidden`}
                      >
@@ -445,7 +445,7 @@ export default function AlertsPage() {
                            </div>
 
                            <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-3 border-t sm:border-t-0 border-white/5 pt-3 sm:pt-0 shrink-0">
-                               <StatusBadge status={alert.severity} className="scale-90 origin-right" />
+                               <StatusBadge status={alert.severity as any} className="scale-90 origin-right" />
                                <span className="text-[10px] uppercase tracking-wide text-text-muted font-bold block sm:mt-1">Details &rarr;</span>
                            </div>
                        </div>
@@ -493,7 +493,7 @@ export default function AlertsPage() {
                     <div className="grid grid-cols-3 gap-4 mb-8">
                        <div className="glass rounded-2xl p-4 flex flex-col items-center justify-center gap-2 border border-white/5">
                            <span className="text-[10px] uppercase tracking-wider text-text-muted font-bold">Classification</span>
-                           <StatusBadge status={selectedAlert.severity} />
+                           <StatusBadge status={selectedAlert.severity as any} />
                        </div>
                        <div className="glass rounded-2xl p-4 flex flex-col items-center justify-center gap-2 border border-white/5">
                            <span className="text-[10px] uppercase tracking-wider text-text-muted font-bold">Region</span>
